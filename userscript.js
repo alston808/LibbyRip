@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name          LibreGRAB
 // @namespace     http://tampermonkey.net/
-// @version       2026-01-09
+// @version       2026-05-28
 // @description   Download all the booty!
 // @author        PsychedelicPalimpsest
 // @license       MIT
@@ -21,19 +21,45 @@
     // Since the ffmpeg.js file is 50mb, it slows the page down too much
     // to be in a "require" attribute, so we load it in async
     function addFFmpegJs(){
-        let scriptTag = document.createElement("script");
-        scriptTag.setAttribute("type", "text/javascript");
-        scriptTag.setAttribute("src", "https://github.com/PsychedelicPalimpsest/FFmpeg-js/releases/download/14/0.12.5.bundle.js");
-        document.body.appendChild(scriptTag);
+        return new Promise(async (accept, reject) => {
+            try {
+                const response = await fetch(
+                    "https://github.com/PsychedelicPalimpsest/FFmpeg-js/releases/download/14/0.12.5.bundle.js"
+                );
 
-        return new Promise(accept =>{
-            let i = setInterval(()=>{
-                if (window.createFFmpeg){
-                    clearInterval(i);
-                    accept(window.createFFmpeg);
+                if (!response.ok) {
+                    throw new Error(`Failed to download ffmpeg.js: ${response.status} ${response.statusText}`);
                 }
-            }, 50)
-            });
+
+                const blob = await response.blob();
+                const blobUrl = URL.createObjectURL(blob);
+
+                let scriptTag = document.createElement("script");
+                scriptTag.setAttribute("type", "text/javascript");
+                scriptTag.src = blobUrl;
+
+                scriptTag.onload = () => {
+                    let i = setInterval(() => {
+                        if (window.createFFmpeg) {
+                            clearInterval(i);
+                            URL.revokeObjectURL(blobUrl);
+                            accept(window.createFFmpeg);
+                        }
+                    }, 50);
+                };
+
+                scriptTag.onerror = (e) => {
+                    URL.revokeObjectURL(blobUrl);
+                    console.error("[LibreGRAB] Failed to load ffmpeg.js:", e);
+                    reject(e);
+                };
+
+                document.body.appendChild(scriptTag);
+            } catch(e) {
+                console.error("[LibreGRAB] ffmpeg.js download failed:", e);
+                reject(e);
+            }
+        });
     }
 
     let downloadElem;
@@ -344,7 +370,7 @@
 
         await Promise.all(fetchPromises);
 
-        downloadElem.innerHTML += `<br><b>Downloads complete!</b> Now combining them together! (This might take a <b><i>minute</i></b>) <br> Transcode progress: <span id="mp3Progress">0</span> hours in to audiobook<br>`
+        downloadElem.innerHTML += `<br><b>Downloads complete!</b> Now combining them together! (This might take a <b><i>minute</i></b>) <br>Transcode progress: <span id="mp3Progress">0</span> hours in to audiobook<br>`
         downloadElem.scrollTo(0, downloadElem.scrollHeight);
 
         let files = "";
@@ -405,29 +431,29 @@
 	let ffmpegInitPromise = null;
 
 	async function initFFmpeg() {
-		console.log("initFFmpeg");
+		console.log("[LibreGRAB] initFFmpeg");
 		if (ffmpegInitPromise) return ffmpegInitPromise;
 		ffmpegInitPromise = (async () => {
 			if (!window.createFFmpeg) {
 				downloadElem.innerHTML += "Downloading FFmpeg.wasm (~50MB)<br>";
-				console.log("Downloading FFmpeg.wasm (~50MB)");
+				console.log("[LibreGRAB] Downloading FFmpeg.wasm (~50MB)");
 				await addFFmpegJs();
 				downloadElem.innerHTML += "Completed FFmpeg.wasm download<br>";
-				console.log("Completed FFmpeg.wasm download");
+				console.log("[LibreGRAB] Completed FFmpeg.wasm download");
 			}
 
 			// Initialize FFmpeg if not already done
 			if (!ffmpeg) {
 				downloadElem.innerHTML += "Initializing FFmpeg.wasm<br>";
-				console.log("Initializing FFmpeg.wasm");
+				console.log("[LibreGRAB] Initializing FFmpeg.wasm");
 				ffmpeg = await window.createFFmpeg({ log: true });
 				downloadElem.innerHTML += "FFmpeg.wasm initialized<br>";
-				console.log("FFmpeg.wasm initialized");
+				console.log("[LibreGRAB] FFmpeg.wasm initialized");
 			}
 		})();
 		return ffmpegInitPromise;
 	}
-    
+
     function exportMP3(){
         if (downloadState != -1)
             return;
@@ -593,20 +619,20 @@
     const originalBind = Function.prototype.bind;
     Function.prototype.bind = function(...args) {
         const boundFn = originalBind.apply(this, args);
-        
+
         // Store bound arguments (excluding `this`) for potential decryption function
         boundFn.__boundArgs = args.slice(1);
-        
+
         // Also store the original function for debugging
         boundFn.__originalFunction = this;
-        
+
         // If this looks like a decryption function, store it globally
-        if (this.toString().includes('decryption') || 
+        if (this.toString().includes('decryption') ||
             args.some(arg => typeof arg === 'function' && arg.toString().includes('decryption'))) {
             console.log("Decryption function detected:", this);
             window.__libregrab_decryption_fn = args.find(arg => typeof arg === 'function');
         }
-        
+
         return boundFn;
     };
 
@@ -655,7 +681,7 @@
         let gc = 0;
         await waitForChapters(()=>{
             gc+=1;
-            downloadElem.querySelector("span#chapAcc").innerHTML = ` ${components.filter((page)=>undefined!=window.pages[page.id]).length}/${totComp}`;
+            downloadElem.querySelector("span#chapAcc").innerHTML = ` ${components.filter((page)=>undefined!=window.pages[c.id]).length}/${totComp}`;
         });
 
         downloadElem.innerHTML += `Chapter gathering complete<br>`
@@ -740,7 +766,7 @@
             }
 
             // Replace old element with the new one
-            el.parentNode.replaceChild(newElement, el);
+            el.parentNode.replaceChild(newElement, newElement);
         }
 
         for (let el of elements) {
@@ -817,7 +843,7 @@
             bmp: 'image/bmp',
             webp: 'image/webp',
             mp4: 'video/mp4',
-            mp3: 'audio/mp3',
+            mp3: 'audio/mpeg',
             pdf: 'application/pdf',
             txt: 'text/plain',
             html: 'text/html',
@@ -1045,7 +1071,7 @@
                 </container>
         `
         });
-        
+
         // Add required encryption file for DRM compliance (required by EPUB spec)
         files.push({
             name: "META-INF/encryption.xml",
@@ -1116,7 +1142,7 @@ function bifFoundBook(){
         alert("Injection failed! __bif_cfc1 not found");
         return;
     }
-    
+
     // Debug: Log the original function structure
     console.log("Original __bif_cfc1:", window.__bif_cfc1);
     console.log("__bif_cfc1.__boundArgs:", window.__bif_cfc1.__boundArgs);
@@ -1184,24 +1210,50 @@ function buildBookPirateUi(){
        =========================================
     */
 
-    /* =========================================
+     /* =========================================
               BEGIN INITIALIZER SECTION!
        =========================================
     */
 
-
 // The "BIF" contains all the info we need to download
 // stuff, so we wait until the page is loaded, and the
 // BIF is present, to inject the pirate menu.
-let intr = setInterval(()=>{
-    if (window.BIF != undefined && document.querySelector(".nav-progress-bar") != undefined){
-        clearInterval(intr);
-        let mode = location.hostname.split(".")[1];
-        if (mode == "listen"){
+(function init() {
+    const checkReady = () => {
+        return window.BIF != undefined && document.querySelector(".nav-progress-bar") != undefined;
+    };
+
+    if (checkReady()) {
+        startScript();
+        return;
+    }
+
+    let attempts = 0;
+    const maxAttempts = 200; // 60 seconds at 300ms intervals
+    const interval = setInterval(() => {
+        attempts++;
+
+        if (checkReady()) {
+            clearInterval(interval);
+            console.log("[LibreGRAB] Page ready after " + attempts + " attempts");
+            startScript();
+        } else if (attempts >= maxAttempts) {
+            clearInterval(interval);
+            console.error("[LibreGRAB] Timeout: Page not ready after " + maxAttempts + " attempts");
+        }
+    }, 300);
+
+    function startScript() {
+        let mode = location.hostname.split(".")[1]; // "listen" or "read"
+        console.log("[LibreGRAB] Detected mode: " + mode + " from hostname: " + location.hostname);
+
+        if (mode == "listen") {
             bifFoundAudiobook();
-        }else if (mode == "read"){
+        } else if (mode == "read") {
             bifFoundBook();
+        } else {
+            console.error("[LibreGRAB] Unknown mode: " + mode);
         }
     }
-}, 25);
+})();
 })();
