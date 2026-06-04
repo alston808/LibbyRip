@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name          LibreGRAB
 // @namespace     http://tampermonkey.net/
-// @version       2026-05-28
+// @version       2026-06-01
 // @description   Download all the booty!
 // @author        PsychedelicPalimpsest
 // @license       MIT
@@ -293,7 +293,7 @@ window.__libregrabClientZipReady = new Promise((resolve, reject) => {
 
         const duration = Math.round(BIF.map.spine.map((x)=>x["audio-duration"]).reduce((acc, val) => acc + val)) * 1000000000;
 
-        let toc = ";FFMETADATA1\\n\\n";
+        let toc = ";FFMETADATA1\n\n";
 
         // Get the offset for each spine element
         let temp = 0;
@@ -311,7 +311,7 @@ window.__libregrabClientZipReady = new Promise((resolve, reject) => {
             return ret;
         }).map((x)=>[
             // Escape the title
-            x.title.replaceAll("\\\\", "\\\\\\\\").replaceAll("#", "\\\\#").replaceAll(";", "\\\\;").replaceAll("=", "\\\\=").replaceAll("\\n", ""),
+            x.title.replaceAll("\\", "\\\\").replaceAll("#", "\\#").replaceAll(";", "\\;").replaceAll("=", "\\=").replaceAll("\n", ""),
             // Calculate absolute offset in nanoseconds
             Math.round(spineSpecificOffset[x.spine] + x.offset) * 1000000000
         ]);
@@ -324,10 +324,10 @@ window.__libregrabClientZipReady = new Promise((resolve, reject) => {
         }
 
         chapters.forEach((x)=>{
-            toc += "[CHAPTER]\\n";
-            toc += `START=${x[1]}\\n`;
-            toc += `END=${x[2]}\\n`;
-            toc += `title=${x[0]}\\n`;
+            toc += "[CHAPTER]\n";
+            toc += `START=${x[1]}\n`;
+            toc += `END=${x[2]}\n`;
+            toc += `title=${x[0]}\n`;
         });
 
         return toc;
@@ -381,7 +381,7 @@ window.__libregrabClientZipReady = new Promise((resolve, reject) => {
         let files = "";
 
         for (let i = 0; i < urls.length; i++){
-            files += `file '${i+1}.mp3'\\n`
+            files += `file '${i+1}.mp3'\n`
         }
         await ffmpeg.writeFile("files.txt", files);
 
@@ -691,7 +691,8 @@ window.__libregrabClientZipReady = new Promise((resolve, reject) => {
         let u = new URL(url);
         if (u.pathname === "/") return url; // Already at root
 
-        u.pathname = u.pathname.replace(/\/[^\/]*\/?$/, "/");
+
+        u.pathname = u.pathname.replace(/\/[^/]*\/?$/, "/");
         return u.toString();
     }
     function getFilenameFromURL(url) {
@@ -1012,7 +1013,7 @@ window.__libregrabClientZipReady = new Promise((resolve, reject) => {
 
         files.push({
             name: "OEBPS/content.opf",
-            input: `<?xml version="1.0" encoding="utf-8" standalone="no"?>\\n` + xmlString
+            input: `<?xml version="1.0" encoding="utf-8" standalone="no"?>\n` + xmlString
         });
     }
     function makeToc(files){
@@ -1077,7 +1078,7 @@ window.__libregrabClientZipReady = new Promise((resolve, reject) => {
 
         files.push({
             name: "OEBPS/toc.ncx",
-            input: `<?xml version="1.0" encoding="utf-8" standalone="no"?>\\n` + xmlString
+            input: `<?xml version="1.0" encoding="utf-8" standalone="no"?>\n` + xmlString
         });
     }
     async function downloadEPUB(){
